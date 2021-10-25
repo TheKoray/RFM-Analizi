@@ -1,0 +1,348 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Oct 20 01:27:13 2021
+
+@author: koray
+"""
+
+import os
+import numpy as np 
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt 
+
+
+data = pd.read_excel("komprasör.xlsx")
+
+#%% Feature Analysis 
+
+def Feature_Analysis(df, number):
+    
+    cat_cols = [cols for cols in df.columns if df[cols].dtypes == 'object']
+    
+    num_but_cat = [cols for cols in df.columns if df[cols].dtypes != 'object'
+                   and df[cols].nunique() < int(number)]
+    
+    num_cols = [cols for cols in df.columns if df[cols].dtypes != 'object'
+                and cols not in num_but_cat]
+    
+    cache =  {'Numeric':num_cols,
+              'Numeric Ama Categoric':num_but_cat,
+              'Categoric':cat_cols
+              }
+    
+    print(f"Categoric Değişken Sayısı = {len(cat_cols)}")
+    print(f"Numeric Ama Kategorik Değişken SAyısı = {len(num_but_cat)}")
+    print(f"Numeric Değişken Sayısı = {len(num_cols)}")
+
+    return cache 
+
+#feature = Feature_Analysis(data,20)
+
+#print(feature)
+
+#%% Numeric Değer , Numeric Değişken 
+
+def Numeric(df, plot = False):
+    
+    num_cols = [cols for cols in df.columns if df[cols].dtypes != 'object']
+    
+    for cols in num_cols:
+        
+        print(f"################## {df[cols].name} #####################", end = '\n\n')
+        print(f"{df[cols].value_counts().count()} farklı değeri vardır")
+        
+        if plot:
+            
+            df[cols].hist()
+            plt.show()
+            
+#Numeric(data, plot= True)            
+        
+#%% Kategorik Değişken
+
+def Category(df, plot = False):
+    
+    cat_cols = [cols for cols in df.columns if df[cols].dtypes == "object"]
+    
+    for cols in cat_cols:
+        
+        print(f"############# {df[cols].name} #################")
+        print(f"{df[cols].value_counts().count()} tane değeri vardır")
+        
+        if plot:
+            
+            sns.countplot(x = df[cols], data = df)
+            plt.show()
+            
+#Category(data, plot = True)
+
+#%% Eksik Değer Analizi 
+
+def Missing(df):
+    
+    miss_cols = []
+    
+    columns = df.columns
+    
+    for cols in columns:
+        
+        if df[cols].isnull().any():
+            
+            count = df[cols].isnull().sum()
+            
+            miss_cols.append((cols,count))
+               
+    return miss_cols
+
+#eksik = Missing(data)
+
+#print(eksik)
+    
+# Datamızın 'CustomerCode' ve 'CustomerName' değişkenlerinin 9 tane eksik değere sahip olduğunu gördük.
+# Bu değişkenlerimizin eksik gözlerm birimlerini satır bazlı silme işlemine tabi tutacağız.
+
+#%% Eksik Değerleri Silme 
+    
+data = data.dropna()
+
+#print(data.isnull().sum())
+    
+    
+#%% New Feature 
+
+# İlk olarak Date değişkenimizi kullanarak yeni bir yıl değişkeni elde edeceğiz.
+    
+data['Yıl'] = data['Date'].str.extract('([0-9]+)\.', expand = False)
+
+#print(data['Yıl'])   
+    
+# Date değişkeninden sadece Ayları alarak yeni bir değişken elde edelim 
+
+data['Ay'] = data['Date'].str.extract('\.([0-9]+)')
+
+#print(data['Ay'])    
+
+# Bu Ay değişkeninde bulunan int değerleri str değerlere dönüştürücez
+# Tipini de object yapmış oalcağız
+
+ay_map = {'01':'Ocak','02':'Şubat','03':'Mart', '04':'Nisan', '05':'Mayıs','06':'Haziran',
+          "07" : 'Temmuz', "08" :'Ağustos', "09":'Eylül', "10":'Ekim', "11": 'Kasım', "12" : 'Aralık'}
+    
+data['Ay'] = data['Ay'].map(ay_map).astype('object')
+
+#print(data['Ay'])
+
+#%% Fiyatı 0 olan kirli data var mı ona bakıyoruz.
+
+#print(data[data['Price'] == 0])
+
+#print(data[data['Quantity'] == "0"])
+
+#Datamızda ki fiyatı ve Quantity değerleri 0'dan büyük gözlemleri alıyoruz.
+
+data = data[(data['Price'] > 0) & (data['Quantity'] > 0)]
+
+#%% Aykırı Değerler 
+
+def Outliers(df):
+    
+    aykırı = []
+    aykırı_yok = []
+    
+    num_cols = [cols for cols in df.columns if df[cols].dtypes != 'object'
+                and cols not in 'Date']
+    
+    for cols in num_cols:
+        
+        Q1 = df[cols].quantile(0.25)
+        Q3 = df[cols].quantile(0.75)
+        IQR = np.multiply(1.5, np.subtract(Q3, Q1))
+        
+        alt_eşik = IQR - Q1
+        üst_eşik = Q3 + IQR
+        
+        if alt_eşik == 0 and üst_eşik == 0:
+            
+            aykırı_yok.append(cols)            
+        else:
+            
+            number = df[cols][(df[cols] < alt_eşik) | (df[cols] > üst_eşik)].count()
+            
+            if number > 0:
+                
+                aykırı.append(cols)
+                
+                cache = {'Alt Eşik':alt_eşik,
+                         'Üst Eşik':üst_eşik,
+                         'Toplam Aykırı Sayısı':number
+                         }
+                
+                print(f"############# {df[cols].name} #############")
+                print(cache, end = "\n\n")
+            else:
+                
+                aykırı_yok.append(cols)
+                
+           
+            cache_feature = {'Aykırı Değeri Olan Değişken':aykırı,
+                             'Aykırı Değeri Olmayan Değişken':aykırı_yok
+                             }                
+    return cache_feature
+
+
+#aykırı = Outliers(data)
+
+#print(aykırı)
+
+
+#%% RFM Analizi 
+
+#Recency
+
+import datetime as dt 
+
+data['Date'] = pd.to_datetime(data['Date'])
+
+today_date = dt.datetime(2021, 10, 20) 
+
+recency = (today_date - data.groupby('CustomerName').agg({'Date':'max'}))
+
+recency.rename(columns = {'Date':'Recency'}, inplace = True)
+        
+recency = recency['Recency'].apply(lambda x:x.days)
+
+#%% Frequency
+
+frequency = data.groupby('CustomerName').agg({'Quantity':'count'})
+
+frequency.rename(columns = {'Quantity':'Frequency'}, inplace = True)
+
+#%% Monetary 
+
+monetary = data.groupby('CustomerName').agg({'NET_TUTAR':'sum'})
+
+monetary.rename(columns = {'NET_TUTAR':'Monetary'}, inplace = True)
+
+#%% Elde Ettiğimiz recency, frequency ve monetary dataframelerini birleştirerek rfm datası elde edeceğiz
+
+rfm = pd.concat([recency,frequency,monetary], axis=1)
+
+#%% Recency Score elde edeceğiz
+
+rfm['RecencyScore'] = pd.qcut(rfm['Recency'].rank(method = 'first'),5,labels = [5,4,3,2,1])
+
+#%% Frequency Score elde edeceğiz
+
+rfm['FrequencyScore'] = pd.qcut(rfm['Frequency'].rank(method = 'first'), 5, labels = [1,2,3,4,5])
+
+#%% Monetary Score elde edeceğiz
+
+rfm['MonetaryScore'] = pd.qcut(rfm['Monetary'].rank(method = 'first'), 5, labels = [1,2,3,4,5])
+
+#%% Elde ettiğimiz Score datalarını toplayacağız ve rfmskor değişkeni elde edeceğiz
+
+rfm['RFMScore'] = rfm['RecencyScore'].astype('str') + rfm['FrequencyScore'].astype('str') + rfm['MonetaryScore'].astype('str')
+
+#%% RFM Skora göre müşterileri analiz edelim
+
+best = rfm[rfm['RFMScore'] == '555']
+
+bad = rfm[rfm['RFMScore'] == '111']
+
+middle = rfm[rfm['RFMScore'] == '333']
+
+
+#%% RFM tablosunda ki Müşteri Segmentlerini Score değerlerine göre rfm datamıza ekleyeceğiz
+
+seg_map = {
+    r'[1-2][1-2]': 'Hibernating',
+    r'[1-2][3-4]': 'At Risk',
+    r'[1-2]5': 'Can\'t Loose',
+    r'3[1-2]': 'About to Sleep',
+    r'33': 'Need Attention',
+    r'[3-4][4-5]': 'Loyal Customers',
+    r'41': 'Promising',
+    r'51': 'New Customers',
+    r'[4-5][2-3]': 'Potential Loyalists',
+    r'5[4-5]': 'Champions' 
+}
+
+rfm['Segment'] = rfm['RecencyScore'].astype('str') + rfm['FrequencyScore'].astype('str')
+
+rfm['Segment'] = rfm['Segment'].replace(seg_map, regex = True)
+
+#%% Oluşturduğumuz Müşteri Segmentine göre Müşteri Analizi 
+
+
+champions = rfm[rfm['Segment'] == 'Champions']
+
+a_sleep = rfm[rfm['Segment'] == 'About to Sleep']
+
+risk = rfm[rfm['Segment'] == 'At Risk']
+    
+new_cus = rfm[rfm['Segment'] == 'New Customers'] 
+
+promising = rfm[rfm['Segment'] == 'Promising']
+    
+attention = rfm[rfm['Segment'] == 'Need Attention']
+    
+#%% Arayüzde kullanmak için bir Modül oluşturalım    
+    
+
+class Customer_Komp():
+    
+    def Champions(self):
+        
+        self.champions = champions.index.tolist()
+        
+        return self.champions
+    
+    def Sleep(self):
+        
+        self.sleep = a_sleep.index.tolist()
+        
+        return self.sleep
+    
+    def Risk(self):
+        
+        self.risk = risk.index.tolist()
+        
+        return self.risk
+        
+    def New(self):
+        
+        self.new = new_cus.index.tolist()
+        
+        return self.new
+    
+    def Promising(self):
+        
+        self.pro = promising.index.tolist()
+        
+        return self.pro
+    
+    def Attention(self):
+        
+        self.attention = attention.index.tolist()
+        
+        return self.attention
+    
+   
+    
+
+
+    
+
+
+
+
+
+
+        
+    
+    
+
+
+
+
